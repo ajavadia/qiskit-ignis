@@ -17,83 +17,79 @@ Generates quantum volume circuits
 """
 
 import numpy as np
-import qiskit
+from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 from qiskit.quantum_info.random import random_unitary
 
 
-def qv_circuits(qubit_lists=None, ntrials=1,
-                qr=None, cr=None):
-    """
-    Return a list of square quantum volume circuits (depth=width)
+def model_circuit(width, depth=None, seed=None):
+    """Create quantum volume model circuit of size width x depth
+    (default depth is equal to width), with a random seed.
 
-    The qubit_lists is specified as a list of qubit lists. For each
-    set of qubits, circuits the depth as the number of qubits in the list
-    are generated
+    The model circuits consist of layers of Haar random
+    elements of SU(4) applied between corresponding pairs
+    of qubits in a random bipartition.
+
+    Args:
+        width (int): number of active qubits in model circuit
+        depth (int): layers of SU(4) operations in model circuit
+        seed (int): randomization seed
+
+    Returns:
+        QuantumCircuit: a quantum volume model circuit
+    """
+    depth = depth or width
+
+    qr = QuantumRegister(width, 'q')
+    cr = ClassicalRegister(width, 'c')
+    circuit = QuantumCircuit(qr, cr)
+
+    for _ in range(depth):
+
+        # Generate uniformly random permutation Pj of [0...n-1]
+        rng = np.random.RandomState(seed)
+        perm = rng.permutation(width)
+
+        # For each pair p in Pj, generate Haar random SU(4)
+        for k in range(int(np.floor(width/2))):
+            U = random_unitary(4, seed=seed)
+            pair = int(perm[2*k]), int(perm[2*k+1])
+            physical_q_0 = qr[pair[0]]
+            physical_q_1 = qr[pair[1]]
+            circuit.append(U, [physical_q_0, physical_q_1])
+
+    circuit.barrier(qr)
+    circuit.measure(qr, cr)
+
+    return circuit
+
+
+def qv_circuits(qubit_lists=None, ntrials=1):
+    """
+    Return circuit sequences for a quantum volume experiment.
+
+    On each list of qubits, sequences of random circuits
+    of incresing depth are generated.
 
     Args:
         qubit_lists: list of list of qubits to apply qv circuits to. Assume
             the list is ordered in increasing number of qubits
         ntrials: number of random iterations
-        qr: quantum register to act on (if None one is created)
-        cr: classical register to measure to (if None one is created)
 
     Returns:
-        qv_circs: list of lists of circuits for the qv sequences
-        (separate list for each trial).
-        qv_circs_nomeas: same as above with no measurements for the ideal
-        simulation
+        list[list[QuantumCircuit]]: qv circuit sequences
+            (separate list for each trial)
     """
-
     circuits = [[] for e in range(ntrials)]
-    circuits_nomeas = [[] for e in range(ntrials)]
-
-    # get the largest qubit number out of all the lists (for setting the
-    # register)
 
     depth_list = [len(l) for l in qubit_lists]
 
-    # go through for each trial
     for trial in range(ntrials):
-
-        # go through for each depth in the depth list
         for depthidx, depth in enumerate(depth_list):
+            max_qubits = np.max(qubit_lists[depthidx])
 
-            n_q_max = np.max(qubit_lists[depthidx])
-
-            qr = qiskit.QuantumRegister(int(n_q_max+1), 'qr')
-            qr2 = qiskit.QuantumRegister(int(depth), 'qr')
-            cr = qiskit.ClassicalRegister(int(depth), 'cr')
-
-            qc = qiskit.QuantumCircuit(qr, cr)
-            qc2 = qiskit.QuantumCircuit(qr2, cr)
-
+            qc = model_circuit(max_qubits+1, depth)
             qc.name = 'qv_depth_%d_trial_%d' % (depth, trial)
-            qc2.name = qc.name
-
-            # build the circuit
-            for _ in range(depth):
-                # Generate uniformly random permutation Pj of [0...n-1]
-                perm = np.random.permutation(depth)
-                # For each pair p in Pj, generate Haar random SU(4)
-                for k in range(int(np.floor(depth/2))):
-                    U = random_unitary(4)
-                    pair = int(perm[2*k]), int(perm[2*k+1])
-                    qc.append(U, [qr[qubit_lists[depthidx][pair[0]]],
-                                  qr[qubit_lists[depthidx][pair[1]]]])
-                    qc2.append(U, [qr2[pair[0]],
-                                   qr2[pair[1]]])
-
-            # append an id to all the qubits in the ideal circuits
-            # to prevent a truncation error in the statevector
-            # simulators
-            qc2.u1(0, qr2)
-
-            circuits_nomeas[trial].append(qc2)
-
-            # add measurement
-            for qind, qubit in enumerate(qubit_lists[depthidx]):
-                qc.measure(qr[qubit], cr[qind])
 
             circuits[trial].append(qc)
 
-    return circuits, circuits_nomeas
+    return circuits
