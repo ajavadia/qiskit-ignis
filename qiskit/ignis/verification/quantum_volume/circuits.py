@@ -18,6 +18,8 @@ Generates quantum volume circuits
 
 import numpy as np
 from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
+from qiskit.compiler import transpile
+from qiskit.transpiler import CouplingMap
 from qiskit.quantum_info.random import random_unitary
 
 
@@ -81,14 +83,18 @@ def qv_circuits(qubit_lists=None, ntrials=1):
     """
     circuits = [[] for e in range(ntrials)]
 
-    depth_list = [len(l) for l in qubit_lists]
-
     for trial in range(ntrials):
-        for depthidx, depth in enumerate(depth_list):
-            max_qubits = np.max(qubit_lists[depthidx])
+        for qubit_list in qubit_lists:
+            width = len(qubit_list)
+            max_qubit = np.max(qubit_list)
 
-            qc = model_circuit(max_qubits+1, depth)
-            qc.name = 'qv_depth_%d_trial_%d' % (depth, trial)
+            qc = model_circuit(width=width, depth=width)
+
+            # embed on physical qubits of interest
+            qc = transpile(qc, coupling_map=CouplingMap.full(max_qubit+1),
+                           initial_layout=qubit_list)
+
+            qc.name = 'qv_width_%d_trial_%d' % (width, trial)
 
             circuits[trial].append(qc)
 

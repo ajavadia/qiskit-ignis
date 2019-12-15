@@ -21,6 +21,7 @@ randomized model circuits", arXiv:1811.12926
 
 import math
 import numpy as np
+from collections import Counter
 from qiskit import QiskitError
 from ...utils import build_counts_dict_from_list
 
@@ -242,6 +243,65 @@ class QVFitter:
             self._ydata[3][depthidx] = (self._ydata[2][depthidx] *
                                         (1.0-self._ydata[2][depthidx])
                                         / self._ntrials)**0.5
+
+    def plot_histogram_comparison(self, ax=None, show_plt=True,
+                                  number_to_keep=None,
+                                  median=None, heavy=None):
+        """Plot a histogram of experiment and simulation.
+
+        data = dictionary of the form {'000': 5, '010': 113, ...}
+        sim = same as "data", but based on an ideal simulation
+        number_to_keep = number of terms to plot
+                         (the rest is put into single bar)
+        median = median probability of "sim"
+        heavy = heavy output probability estimate of "data"
+        """
+        if not HAS_MATPLOTLIB:
+            raise ImportError('The function plot_histogram_comparison '
+                              'needs matplotlib. '
+                              'Run "pip install matplotlib" before.')
+
+        if ax is None:
+            plt.figure()
+            ax = plt.gca()
+
+        if number_to_keep is not None:
+            data_temp = dict(Counter(data).most_common(number_to_keep))
+            data_temp["rest"] = sum(data.values()) - sum(data_temp.values())
+            data = data_temp
+            sim_temp = dict(Counter(sim).most_common(number_to_keep))
+            sim_temp["rest"] = sum(sim.values()) - sum(sim_temp.values())
+            sim = sim_temp
+
+        labels = sorted(data)
+        values = np.array([data[key] for key in labels], dtype=float)
+        simvalues = np.array([sim[key] for key in labels], dtype=float)
+        pvalues = values / sum(values)
+        simpvalues = simvalues / sum(simvalues)
+        numelem = len(values)
+        ind = np.arange(numelem)
+        width = 0.35
+        fig, ax = plt.subplots()
+        rects = ax.bar(ind, pvalues, width, color='seagreen', fill=True)
+        ax.bar(ind, simpvalues, width, color='black', fill=False)
+        if median is not None:
+            ax.plot(ind, median + ind*0, 'r:')
+        ax.set_ylabel('Probabilities', fontsize=12)
+        ax.set_xticks(ind)
+        ax.set_xticklabels([l[0:4] for l in labels], fontsize=12, rotation=70)
+        for rect in rects:
+            height = rect.get_height()
+            ax.text(rect.get_x() + rect.get_width() / 2., 1.05 * height,
+                    '%.2f' % float(height),
+                    ha='center', va='bottom')
+        if heavy is not None:
+            ax.text(0.9, 0.95, 'heavy ~ %.2f' % float(heavy),
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    transform=ax.transAxes)
+
+        if show_plt:
+            plt.show()
 
     def plot_qv_data(self, ax=None, show_plt=True):
         """
