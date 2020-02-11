@@ -91,7 +91,7 @@ def qv_circuits(qubit_lists=None, ntrials=1):
             qc = model_circuit(width=width, depth=width)
 
             # embed on physical qubits of interest
-            qc = transpile(qc, coupling_map=CouplingMap.full(max_qubit+1),
+            qc = transpile(qc, coupling_map=CouplingMap.from_full(max_qubit+1),
                            initial_layout=qubit_list)
 
             qc.name = 'qv_width_%d_trial_%d' % (width, trial)
